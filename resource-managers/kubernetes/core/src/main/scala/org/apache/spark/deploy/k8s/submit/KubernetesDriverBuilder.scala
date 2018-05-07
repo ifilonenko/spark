@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.submit
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
-import org.apache.spark.deploy.k8s.features.bindings.PythonDriverFeatureStep
+import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -35,7 +35,10 @@ private[spark] class KubernetesDriverBuilder(
     provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => LocalDirsFeatureStep) =
       new LocalDirsFeatureStep(_),
-    providePythonStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+    provideJavaStep: (KubernetesConf[KubernetesDriverSpecificConf]
+      => JavaDriverFeatureStep) =
+      new JavaDriverFeatureStep(_),
+    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf]
       => PythonDriverFeatureStep) =
       new PythonDriverFeatureStep(_)) {
 
@@ -48,8 +51,10 @@ private[spark] class KubernetesDriverBuilder(
       provideLocalDirsStep(kubernetesConf))
     val maybeRoleSecretNamesStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       Some(provideSecretsStep(kubernetesConf)) } else None
-    val maybeNonJVMBindings = kubernetesConf.roleSpecificConf.mainAppResource.getOrElse(None)
+    val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.getOrElse(None)
       match {
+        case JavaMainAppResource(_) =>
+          Some(provideJavaStep(kubernetesConf))
         case PythonMainAppResource(_) =>
           Some(providePythonStep(kubernetesConf))
         case _ => None
@@ -57,7 +62,7 @@ private[spark] class KubernetesDriverBuilder(
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++
       maybeRoleSecretNamesStep.toSeq ++
-      maybeNonJVMBindings.toSeq
+        bindingsStep.toSeq
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
