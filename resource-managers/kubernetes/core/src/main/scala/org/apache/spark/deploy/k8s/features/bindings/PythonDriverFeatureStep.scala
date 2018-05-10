@@ -22,10 +22,8 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.EnvVarBuilder
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
-import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
 private[spark] class PythonDriverFeatureStep(
