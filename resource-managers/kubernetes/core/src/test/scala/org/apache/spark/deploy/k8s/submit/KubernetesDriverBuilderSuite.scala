@@ -130,8 +130,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
-      JAVA_STEP_TYPE,
-      SERVICE_STEP_TYPE)
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE)
   }
 
   test("Apply Python step if main resource is python.") {
