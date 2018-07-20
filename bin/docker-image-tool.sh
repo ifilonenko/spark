@@ -47,7 +47,7 @@ function build {
 
   if [ ! -f "$SPARK_HOME/RELEASE" ]; then
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
-    IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
+    IMG_PATH=resource-managers/kubernetes/docker/src
     BUILD_ARGS=(
       --build-arg
       img_path=$IMG_PATH
@@ -67,8 +67,9 @@ function build {
     --build-arg
     base_img=$(image_ref spark)
   )
-  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
-  local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/Dockerfile"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/python/Dockerfile"}
+  local KDOCKERFILE="$IMG_PATH/test/dockerfiles/spark/kerberos/Dockerfile"
 
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
@@ -76,6 +77,10 @@ function build {
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
+    -f "$PYDOCKERFILE" .
+
+  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-kerberos) \
     -f "$PYDOCKERFILE" .
 }
 
