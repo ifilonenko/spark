@@ -18,7 +18,7 @@
 ARG base_img
 FROM $base_img
 
-ARG k_img_path=kubernetes/test/dockerfiles/spark/kerberos
+ARG k_img_path=kubernetes/src/test/dockerfiles/spark/kerberos
 
 RUN apk add --no-cache --update krb5 krb5-libs
 

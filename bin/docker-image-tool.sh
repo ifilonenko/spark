@@ -57,7 +57,7 @@ function build {
     )
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
-    IMG_PATH="kubernetes/dockerfiles"
+    IMG_PATH="kubernetes/src"
     BUILD_ARGS=(${BUILD_PARAMS})
   fi
 
@@ -83,7 +83,7 @@ function build {
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-kerberos) \
-    -f "$PYDOCKERFILE" .
+    -f "$KDOCKERFILE" .
 }
 
 function push {

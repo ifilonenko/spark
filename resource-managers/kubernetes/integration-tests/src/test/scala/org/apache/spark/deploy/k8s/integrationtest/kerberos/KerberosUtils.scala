@@ -25,7 +25,7 @@ import io.fabric8.kubernetes.api.model.extensions.{Deployment, DeploymentBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.io.FileUtils.readFileToString
 
-import org.apache.spark.deploy.k8s.submit.ContainerNameEqualityPredicate
+import org.apache.spark.deploy.k8s.integrationtest.ContainerNameEqualityPredicate
 
  /**
   * This class is responsible for handling all Utils and Constants necessary for testing

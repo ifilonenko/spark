@@ -34,7 +34,7 @@ import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBacke
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite {
+  with PythonTestsSuite with ClientModeTestsSuite with KerberosTestSuite {
 
   import KubernetesSuite._
 
@@ -47,6 +47,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   protected var sparkAppConf: SparkAppConf = _
   protected var containerLocalSparkDistroExamplesJar: String = _
   protected var appLocator: String = _
+
+  // Kerberos related testing
+  protected var kerberizedHadoopClusterLauncher: KerberizedHadoopClusterLauncher = _
+  protected var kerberosTestLauncher: KerberosTestPodLauncher = _
 
   override def beforeAll(): Unit = {
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -76,6 +80,13 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     testBackend = IntegrationTestBackendFactory.getTestBackend
     testBackend.initialize()
     kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
+    kerberizedHadoopClusterLauncher =
+      new KerberizedHadoopClusterLauncher(
+        kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace),
+        kubernetesTestComponents.namespace)
+    kerberosTestLauncher = new KerberosTestPodLauncher(
+      kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace),
+      kubernetesTestComponents.namespace)
   }
 
   override def afterAll(): Unit = {
@@ -96,6 +107,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   after {
+    kubernetesTestComponents.deleteKubernetesPVs()
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.deleteNamespace()
     }
