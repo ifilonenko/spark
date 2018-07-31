@@ -69,7 +69,7 @@ private[spark] object ClientArguments {
         driverArgs += arg
       case other =>
         val invalid = other.mkString(" ")
-        throw new RuntimeException(s"Unknown arguments: $invalid")
+        throw new Runt  imeException(s"Unknown arguments: $invalid")
     }
 
     require(mainClass.isDefined, "Main class must be specified via --main-class")

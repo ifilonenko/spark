@@ -135,10 +135,10 @@ private[spark] class KerberosPVWatcherCache(
     }
 
     private def maybeDeploymentAndServiceDone(name: String): Boolean = {
-      val finished = pvCache.get(name).contains("Bound") &&
+      val finished = pvCache.get(name).contains("Available") &&
         pvcCache.get(name).contains(name)
       if (!finished) {
-        logInfo(s"$name is not bounded")
+        logInfo(s"$name is not available")
         if (name == "nn-hadoop") nnIsUp = false
         else if (name == "server-keytab") ktIsUp = false
       }

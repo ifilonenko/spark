@@ -88,7 +88,7 @@ private[spark] object HadoopBootstrapUtil {
 
    /**
     * bootstraping the container with ConfigMaps that store
-    * Hadoop conifiguration files
+    * Hadoop configuration files
     *
     * @param hadoopConfDir location of HADOOP_CONF_DIR
     * @param hadoopConfigMapName name of the configMap for HADOOP_CONF_DIR
