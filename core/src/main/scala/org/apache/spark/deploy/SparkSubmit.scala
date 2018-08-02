@@ -164,7 +164,15 @@ private[spark] class SparkSubmit extends Logging {
             }
         }
       } else {
-        runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+        if (sparkConf.getOption("spark.kubernetes.kerberos.proxyUser").isDefined) {
+          // scalastyle:off println
+          printStream.println("Running as proxy user in k8s cluster mode...")
+          // scalastyle:on println
+          SparkHadoopUtil.get.runAsSparkUser(
+            () => runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose))
+        } else {
+          runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+        }
       }
     }
 
@@ -1055,6 +1063,9 @@ private[spark] object SparkSubmitUtils {
     cr.add(localM2)
 
     val localIvy = new FileSystemResolver
+    // scalastyle:off println
+    printStream.println(s"${defaultIvyUserDir.getPath} is where the problem is")
+    // scalastyle:on println
     val localIvyRoot = new File(defaultIvyUserDir, "local")
     localIvy.setLocal(true)
     localIvy.setRepository(new FileRepository(localIvyRoot))

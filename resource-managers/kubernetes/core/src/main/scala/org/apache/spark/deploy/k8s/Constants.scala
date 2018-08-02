@@ -60,6 +60,7 @@ private[spark] object Constants {
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
   val ENV_SPARK_USER = "SPARK_USER"
+  val ENV_HADOOP_PROXY_USER = "HADOOP_PROXY_USER"
   // Spark app configs for containers
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
@@ -80,7 +81,9 @@ private[spark] object Constants {
 
   // Hadoop Configuration
   val HADOOP_FILE_VOLUME = "hadoop-properties"
-  val HADOOP_CONF_DIR_PATH = "/etc/hadoop/conf"
+  val KRB_FILE_VOLUME = "krb5-file"
+  val HADOOP_CONF_DIR_PATH = "/opt/hadoop/conf"
+  val KRB_FILE_DIR_PATH = "/etc"
   val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
   val HADOOP_CONF_DIR_LOC = "spark.kubernetes.hadoop.conf.dir"
   val HADOOP_CONFIG_MAP_SPARK_CONF_NAME =

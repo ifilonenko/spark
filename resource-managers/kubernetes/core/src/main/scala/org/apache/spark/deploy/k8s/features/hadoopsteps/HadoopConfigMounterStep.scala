@@ -36,11 +36,8 @@ private[spark] class HadoopConfigMounterStep(
   extends HadoopConfigurationStep with Logging{
 
   override def configureHadoopSpec(hSpec: HadoopConfigSpec) : HadoopConfigSpec = {
-    logInfo("HADOOP_CONF_DIR defined. Mounting ConfigMaps with Hadoop specific files")
+    logInfo("HADOOP_CONF_DIR defined. Mounting ConfigMap with Hadoop specific files")
      hSpec.copy(
-       podVolumes = hSpec.podVolumes,
-       containerEnvs = hSpec.containerEnvs,
-       containerVMs = hSpec.containerVMs,
        configMapProperties = hSpec.configMapProperties ++
          hadoopConfigFiles.map(file =>
            (file.toPath.getFileName.toString, Files.toString(file, Charsets.UTF_8))).toMap)

@@ -12,14 +12,12 @@ until /usr/bin/kinit -kt /var/keytabs/hdfs.keytab hdfs/nn.${NAMESPACE}.svc.clust
       --deploy-mode cluster \
       --class ${CLASS_NAME} \
       --master k8s://${MASTER_URL} \
-      --kubernetes-namespace ${NAMESPACE} \
+      --conf spark.kubernetes.namespace=${NAMESPACE} \
       --conf spark.executor.instances=1 \
       --conf spark.app.name=spark-hdfs \
       --conf spark.driver.extraClassPath=/opt/spark/hconf/core-site.xml:/opt/spark/hconf/hdfs-site.xml:/opt/spark/hconf/yarn-site.xml:/etc/krb5.conf \
-      --conf spark.kubernetes.driver.docker.image=spark-driver:latest \
-      --conf spark.kubernetes.executor.docker.image=spark-executor:latest \
-      --conf spark.kubernetes.initcontainer.docker.image=spark-init:latest \
-      --conf spark.kubernetes.kerberos.enabled=true \
+      --conf spark.kubernetes.container.image=spark:latest \
+      --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
       --conf spark.kubernetes.kerberos.keytab=/var/keytabs/hdfs.keytab \
       --conf spark.kubernetes.kerberos.principal=hdfs/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL \
       --conf spark.kubernetes.driver.label.spark-app-locator=${APP_LOCATOR_LABEL} \
