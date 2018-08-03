@@ -22,9 +22,9 @@ import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.apache.hadoop.security.UserGroupInformation
 import scala.collection.mutable
 import scala.util.control.NonFatal
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
@@ -199,7 +199,7 @@ private[spark] class Client(
 /**
  * Main class and entry point of application submission in KUBERNETES mode.
  */
-private[spark] class KubernetesClientApplication extends SparkApplication {
+private[spark] class KubernetesClientApplication extends SparkApplication with Logging{
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val parsedArguments = ClientArguments.fromCommandLineArgs(args)
@@ -221,6 +221,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     sparkConf.set(KUBERNETES_PYSPARK_PY_FILES, clientArguments.maybePyFiles.getOrElse(""))
     // Run driver as proxy user for Kerberos login by the HadoopUGI
     if (UserGroupInformation.isSecurityEnabled) {
+      logInfo("Because Kerberos is enabled we should run driver as proxy user")
       sparkConf.set(KUBERNETES_KERBEROS_PROXY_USER, "true")
     }
     val kubernetesConf = KubernetesConf.createDriverConf(

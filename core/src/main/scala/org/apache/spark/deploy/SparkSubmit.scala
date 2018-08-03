@@ -143,7 +143,13 @@ private[spark] class SparkSubmit extends Logging {
     val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
+      // scalastyle:off println
+      printStream.println("Here 1...")
+      // scalastyle:on println
       if (args.proxyUser != null) {
+        // scalastyle:off println
+        printStream.println("Here 2...")
+        // scalastyle:on println
         val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
           UserGroupInformation.getCurrentUser())
         try {
@@ -164,17 +170,15 @@ private[spark] class SparkSubmit extends Logging {
             }
         }
       } else {
-        if (sparkConf.getOption("spark.kubernetes.kerberos.proxyUser").isDefined) {
           // scalastyle:off println
-          printStream.println("Running as proxy user in k8s cluster mode...")
+          printStream.println("Here 3...")
           // scalastyle:on println
-          SparkHadoopUtil.get.runAsSparkUser(
-            () => runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose))
-        } else {
           runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
-        }
       }
     }
+    // scalastyle:off println
+    printStream.println("Here 4...")
+    // scalastyle:on println
 
     // Let the main class re-initialize the logging system once it starts.
     if (uninitLog) {
@@ -199,7 +203,18 @@ private[spark] class SparkSubmit extends Logging {
       }
     // In all other modes, just run the main class as prepared
     } else {
-      doRunMain()
+      // scalastyle:off println
+      printStream.println("Here 5...")
+      // scalastyle:on println
+      if (sparkConf.getOption("spark.kubernetes.kerberos.proxyUser").isDefined) {
+        // scalastyle:off println
+        printStream.println("Running as proxy user in k8s cluster mode...")
+        // scalastyle:on println
+        SparkHadoopUtil.get.runAsSparkUser(
+          () => runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose))
+      } else {
+        doRunMain()
+      }
     }
   }
 
