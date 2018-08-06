@@ -83,13 +83,13 @@ private[spark] object HadoopBootstrapUtil {
           .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
           .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$dtSecretItemKey")
           .endEnv()
+        // TODO (ifilonenko): This has the correct user as ` userName` however
+        // since the user to which the keytab has access to might not be on the k8s
+        // nodes, this atm leaves us with the option to use `root`. Next step is to
+        // support customization of the UNIX username.
         .addNewEnv()
           .withName(ENV_SPARK_USER)
-          .withValue(userName)
-          .endEnv()
-        .addNewEnv()
-          .withName(ENV_HADOOP_PROXY_USER)
-          .withValue(userName)
+          .withValue("root")
           .endEnv()
         .build()
     SparkPod(kerberizedPod, kerberizedContainer)

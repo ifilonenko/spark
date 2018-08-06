@@ -27,7 +27,6 @@ import java.util.UUID
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.{Properties, Try}
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -44,7 +43,6 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
-
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
@@ -203,18 +201,7 @@ private[spark] class SparkSubmit extends Logging {
       }
     // In all other modes, just run the main class as prepared
     } else {
-      // scalastyle:off println
-      printStream.println("Here 5...")
-      // scalastyle:on println
-      if (sparkConf.getOption("spark.kubernetes.kerberos.proxyUser").isDefined) {
-        // scalastyle:off println
-        printStream.println("Running as proxy user in k8s cluster mode...")
-        // scalastyle:on println
-        SparkHadoopUtil.get.runAsSparkUser(
-          () => runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose))
-      } else {
-        doRunMain()
-      }
+      doRunMain()
     }
   }
 
@@ -235,6 +222,9 @@ private[spark] class SparkSubmit extends Logging {
       args: SparkSubmitArguments,
       conf: Option[HadoopConfiguration] = None)
       : (Seq[String], Seq[String], SparkConf, String) = {
+    // scalastyle:off println
+    printStream.println(s"Starting to prepare the environemnt")
+    // scalastyle:on println
     // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
@@ -374,8 +364,27 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
+    import scala.collection.JavaConverters._
+    val environmentVars = System.getenv().asScala
+    for ((k, v) <- environmentVars) {
+      // scalastyle:off println
+      printStream.println(s"key: $k, value: $v")
+      // scalastyle:on println
+    }
+    // scalastyle:off println
+    printStream.println(s"The user is ${System.getenv("SPARK_USER")}")
+    // scalastyle:on println
     // Resolve glob path for different resources.
-    args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
+    if (sparkConf.getOption("spark.kubernetes.kerberos.proxyUser").isDefined) {
+      // scalastyle:off println
+      printStream.println("Running as proxy user in k8s cluster mode...")
+      // scalastyle:on println
+      SparkHadoopUtil.get.runAsSparkUser(
+        () =>
+          args.jars = Option( args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull)
+    } else {
+      args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
+    }
     args.files = Option(args.files).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -776,7 +785,9 @@ private[spark] class SparkSubmit extends Logging {
       }
       sparkConf.set("spark.submit.pyFiles", formattedPyFiles)
     }
-
+    // scalastyle:off println
+    printStream.println(s"Finished setting up the environment")
+    // scalastyle:on println
     (childArgs, childClasspath, sparkConf, childMainClass)
   }
 
