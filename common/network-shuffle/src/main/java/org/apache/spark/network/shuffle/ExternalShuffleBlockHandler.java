@@ -20,9 +20,12 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
@@ -59,6 +62,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
   private final ShuffleMetrics metrics;
+  private final Set<String> appIds;
 
   public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
@@ -74,6 +78,25 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     this.metrics = new ShuffleMetrics();
     this.streamManager = streamManager;
     this.blockManager = blockManager;
+    this.appIds = Collections.synchronizedSet(new HashSet<>());
+  }
+
+  public Boolean hasAppId(String appId) {
+    synchronized (appIds) {
+      return appIds.contains(appId);
+    }
+  }
+
+  public void addAppId(String appId) {
+    synchronized (appIds) {
+      appIds.add(appId);
+    }
+  }
+
+  public void removeAppId(String appId) {
+    synchronized (appIds) {
+      appIds.remove(appId);
+    }
   }
 
   @Override
@@ -125,6 +148,9 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         checkAuth(client, msg.appId);
         blockManager.registerExecutorForBackups(msg.appId, msg.execId, msg.shuffleManager);
         callback.onSuccess(ByteBuffer.wrap(new byte[0]));
+        if (!hasAppId(msg.appId)){
+          addAppId(msg.appId);
+        }
       } finally {
         responseDelayContext.stop();
       }
