@@ -90,11 +90,11 @@ private[spark] class KubernetesHadoopDelegationTokenManager(
    *               The same ref will also receive future token updates unless overridden later.
    * @return The newly logged in user, or null
    */
-  override def start(driver: Option[RpcEndpointRef] = None): UserGroupInformation = {
-    driver.foreach(super.setDriverRef)
-    val driverOpt = driverRef.get()
+  override def start(driverEndpoint: Option[RpcEndpointRef] = None): UserGroupInformation = {
+    driverEndpoint.foreach(super.setDriverRef)
+    val driver = driverRef.get()
     if (isTokenRenewalEnabled &&
-      kubernetesClient.isDefined && driver.isDefined && driverOpt != null) {
+      kubernetesClient.isDefined && driverEndpoint.isDefined && driver != null) {
       watch = kubernetesClient.get
         .secrets()
         .withName(dtSecretName.get)
@@ -113,14 +113,14 @@ private[spark] class KubernetesHadoopDelegationTokenManager(
                   val credentials = new Credentials
                   deserialize(credentials, Base64.decodeBase64(data))
                   val tokens = SparkHadoopUtil.get.serialize(credentials)
-                  driverOpt.send(UpdateDelegationTokens(tokens))
+                  driver.send(UpdateDelegationTokens(tokens))
               }
           }
         }
       })
       null
     } else {
-      super.start(driver)
+      super.start(driverEndpoint)
     }
   }
 }
