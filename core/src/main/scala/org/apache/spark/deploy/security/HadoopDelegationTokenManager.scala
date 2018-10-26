@@ -70,8 +70,8 @@ private[spark] class HadoopDelegationTokenManager(
     "spark.yarn.security.credentials.%s.enabled")
   private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
-  private val principal = sparkConf.get(PRINCIPAL).orNull
-  private val keytab = sparkConf.get(KEYTAB).orNull
+  protected val principal = sparkConf.get(PRINCIPAL).orNull
+  protected val keytab = sparkConf.get(KEYTAB).orNull
 
   if (principal != null) {
     require(keytab != null, "Kerberos principal specified without a keytab.")
@@ -82,8 +82,8 @@ private[spark] class HadoopDelegationTokenManager(
   logDebug("Using the following builtin delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
-  private var renewalExecutor: ScheduledExecutorService = _
-  private val driverRef = new AtomicReference[RpcEndpointRef]()
+  protected var renewalExecutor: ScheduledExecutorService = _
+  protected val driverRef = new AtomicReference[RpcEndpointRef]()
 
   protected def setDriverRef(ref: RpcEndpointRef): Unit = {
     driverRef.set(ref)
@@ -262,7 +262,7 @@ private[spark] class HadoopDelegationTokenManager(
    *
    * @return Credentials containing the new tokens.
    */
-  private def obtainTokensAndScheduleRenewal(ugi: UserGroupInformation): Credentials = {
+  protected def obtainTokensAndScheduleRenewal(ugi: UserGroupInformation): Credentials = {
     ugi.doAs(new PrivilegedExceptionAction[Credentials]() {
       override def run(): Credentials = {
         val creds = new Credentials()
@@ -280,7 +280,7 @@ private[spark] class HadoopDelegationTokenManager(
     })
   }
 
-  private def doLogin(): UserGroupInformation = {
+  protected def doLogin(): UserGroupInformation = {
     logInfo(s"Attempting to login to KDC using principal: $principal")
     val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
     logInfo("Successfully logged into KDC.")
