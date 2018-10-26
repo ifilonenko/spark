@@ -262,6 +262,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_KERBEROS_DT_SECRET_RENEWAL =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.renewal")
+    .doc("Enabling the driver to watch the secret specified at " +
+      "spark.kubernetes.kerberos.tokenSecret.name for updates so that the " +
+      "tokens can be propogated to the executors.")
+    .booleanConf
+    .createWithDefault(false)
+
   val APP_RESOURCE_TYPE =
     ConfigBuilder("spark.kubernetes.resource.type")
       .doc("This sets the resource type internally")

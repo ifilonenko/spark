@@ -708,7 +708,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * fully constructed), only if security is enabled in the Hadoop configuration.
    */
   protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
-
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
