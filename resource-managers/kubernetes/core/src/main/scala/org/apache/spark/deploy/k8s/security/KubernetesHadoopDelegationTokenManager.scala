@@ -17,30 +17,34 @@
 
 package org.apache.spark.deploy.k8s.security
 
+import java.io.{ByteArrayInputStream, DataInputStream}
 import java.io.File
+
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.Secret
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watch, Watcher}
+import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.Watcher.Action
+import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants.SECRET_DATA_ITEM_PREFIX_TOKENS
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.config.KERBEROS_RELOGIN_PERIOD
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
-import org.apache.spark.util.ThreadUtils
 
 /**
  * Adds Kubernetes-specific functionality to HadoopDelegationTokenManager.
  */
 private[spark] class KubernetesHadoopDelegationTokenManager(
     _sparkConf: SparkConf,
-    _hadoopConf: Configuration)
+    _hadoopConf: Configuration,
+    kubernetesClient: Option[KubernetesClient])
   extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf) {
 
   def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
@@ -53,12 +57,19 @@ private[spark] class KubernetesHadoopDelegationTokenManager(
   private val isTokenRenewalEnabled =
     _sparkConf.get(KUBERNETES_KERBEROS_DT_SECRET_RENEWAL)
 
+  private val dtSecretName = _sparkConf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
   if (isTokenRenewalEnabled) {
-    require(_sparkConf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME).isDefined,
+    require(dtSecretName.isDefined,
       "Must specify the token secret which the driver must watch for updates")
   }
 
-  private var watcher: Watcher[Secret] = _
+  private def deserialize(credentials: Credentials, data: Array[Byte]): Unit = {
+    val byteStream = new ByteArrayInputStream(data)
+    val dataStream = new DataInputStream(byteStream)
+    credentials.readTokenStorageStream(dataStream)
+  }
+
+  private var watch: Watch = _
 
   /**
    * As in HadoopDelegationTokenManager this starts the token renewer.
@@ -80,19 +91,33 @@ private[spark] class KubernetesHadoopDelegationTokenManager(
    * @return The newly logged in user, or null
    */
   override def start(driver: Option[RpcEndpointRef] = None): UserGroupInformation = {
-    if (isTokenRenewalEnabled) {
-      watcher = new Watcher[Secret] {
+    driver.foreach(super.setDriverRef)
+    val driverOpt = driverRef.get()
+    if (isTokenRenewalEnabled &&
+      kubernetesClient.isDefined && driver.isDefined && driverOpt != null) {
+      watch = kubernetesClient.get
+        .secrets()
+        .withName(dtSecretName.get)
+        .watch(new Watcher[Secret] {
         override def onClose(cause: KubernetesClientException): Unit =
           logInfo("Ending the watch of DT Secret")
-
         override def eventReceived(action: Watcher.Action, resource: Secret): Unit = {
           action match {
             case Action.ADDED | Action.MODIFIED =>
               logInfo("Secret update")
-              // TODO: Figure out what to do with secret here
+              val dataItems = resource.getData.asScala.filterKeys(
+                _.startsWith(SECRET_DATA_ITEM_PREFIX_TOKENS)).toSeq.sorted
+              val latestToken = if (dataItems.nonEmpty) Some(dataItems.max) else None
+              latestToken.foreach {
+                case (_, data) =>
+                  val credentials = new Credentials
+                  deserialize(credentials, Base64.decodeBase64(data))
+                  val tokens = SparkHadoopUtil.get.serialize(credentials)
+                  driverOpt.send(UpdateDelegationTokens(tokens))
+              }
           }
         }
-      }
+      })
       null
     } else {
       super.start(driver)

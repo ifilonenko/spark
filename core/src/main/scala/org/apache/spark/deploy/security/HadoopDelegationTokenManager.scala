@@ -107,7 +107,6 @@ private[spark] class HadoopDelegationTokenManager(
    */
   def start(driver: Option[RpcEndpointRef] = None): UserGroupInformation = {
     driver.foreach(setDriverRef)
-
     if (principal != null) {
       renewalExecutor =
         ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")

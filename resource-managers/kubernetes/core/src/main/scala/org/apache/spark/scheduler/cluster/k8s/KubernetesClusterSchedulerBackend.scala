@@ -21,7 +21,10 @@ import java.util.concurrent.ExecutorService
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.concurrent.{ExecutionContext, Future}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
@@ -124,6 +127,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
     new KubernetesDriverEndpoint(rpcEnv, properties)
+  }
+
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new KubernetesHadoopDelegationTokenManager(conf,
+      SparkHadoopUtil.get.newConfiguration(conf),
+      kubernetesClient))
   }
 
   private class KubernetesDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
