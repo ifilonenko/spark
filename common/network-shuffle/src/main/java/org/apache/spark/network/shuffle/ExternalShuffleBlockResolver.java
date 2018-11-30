@@ -201,7 +201,10 @@ public class ExternalShuffleBlockResolver {
               "Unsupported shuffle manager of executor: %s.", fullId));
     }
 
+    // TODO: Finish
     ExecutorShuffleInfo backupShuffleInfo = new ExecutorShuffleInfo(
+        new String[] { },
+        new String[] { },
         new String[] { executorBackupDir.getAbsolutePath() },
         1,
         shuffleManager);

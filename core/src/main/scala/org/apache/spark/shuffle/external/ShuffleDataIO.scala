@@ -17,9 +17,7 @@
 
 package org.apache.spark.shuffle.external
 
-private[spark]
-
-trait ShuffleDataIO {
+private[spark] trait ShuffleDataIO {
   def writeSupport(): ShuffleWriteSupport
   def readSupport(): ShuffleReadSupport
 }

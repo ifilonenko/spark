@@ -22,10 +22,10 @@ import java.net.Socket
 import java.util.{Locale, ServiceLoader}
 
 import com.google.common.collect.MapMaker
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Properties
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
@@ -39,7 +39,8 @@ import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
-import org.apache.spark.shuffle.{DefaultShuffleServiceAddressProvider, ShuffleManager, ShuffleServiceAddressProviderFactory}
+import org.apache.spark.shuffle.external.{DefaultShuffleServiceAddressProvider, ShuffleServiceAddressProviderFactory}
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
 

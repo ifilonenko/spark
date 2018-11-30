@@ -19,9 +19,7 @@ package org.apache.spark.shuffle.external
 
 import java.io.InputStream
 
-private[spark]
-
-// TODO: Support batch-fetch
-trait ShufflePartitionReader {
-  def fetchPartition(reduceId: Int): InputStream
+// TODO: Support batch
+private[spark] trait ShufflePartitionReader {
+  def fetchPartition(reduceId: Long): InputStream
 }

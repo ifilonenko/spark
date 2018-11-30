@@ -28,13 +28,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{MetadataFetchFailedException, ShuffleServiceAddressProvider}
+import org.apache.spark.shuffle.MetadataFetchFailedException
+import org.apache.spark.shuffle.external.ShuffleServiceAddressProvider
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 

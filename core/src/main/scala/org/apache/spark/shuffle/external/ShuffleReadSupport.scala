@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle.external
 
-private[spark]
-
-trait ShuffleReadSupport {
+private[spark] trait ShuffleReadSupport {
   def newPartitionReader(appId: String, shuffleId: Int, mapId: Int): ShufflePartitionReader
 }

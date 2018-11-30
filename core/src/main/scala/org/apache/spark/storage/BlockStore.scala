@@ -28,7 +28,7 @@ import scala.collection.mutable.ListBuffer
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
@@ -38,11 +38,11 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
- * Stores BlockManager blocks on disk.
+ * Stores BlockManager blocks.
  */
-private[spark] class DiskStore(
+private[spark] class BlockStore(
     conf: SparkConf,
-    diskManager: DiskBlockManager,
+    blockMapper: BlockMapper,
     securityManager: SecurityManager) extends Logging {
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
@@ -60,35 +60,40 @@ private[spark] class DiskStore(
     if (contains(blockId)) {
       throw new IllegalStateException(s"Block $blockId is already present in the disk store")
     }
-    logDebug(s"Attempting to put block $blockId")
-    val startTime = System.currentTimeMillis
-    val file = diskManager.getFile(blockId)
-    val out = new CountingWritableChannel(openForWrite(file))
-    var threwException: Boolean = true
-    try {
-      writeFunc(out)
-      blockSizes.put(blockId, out.getCount)
-      threwException = false
-    } finally {
-      try {
-        out.close()
-      } catch {
-        case ioe: IOException =>
-          if (!threwException) {
-            threwException = true
-            throw ioe
+    blockMapper match {
+      case _: RemoteBlockManager =>
+        throw new IllegalAccessError("Remote Block Mapper does not support this writing feature")
+      case d: DiskBlockManager =>
+        logDebug(s"Attempting to put block $blockId")
+        val startTime = System.currentTimeMillis
+        val file = d.getFile(blockId)
+        val out = new CountingWritableChannel(openForWrite(file))
+        var threwException: Boolean = true
+        try {
+          writeFunc(out)
+          blockSizes.put(blockId, out.getCount)
+          threwException = false
+        } finally {
+          try {
+            out.close()
+          } catch {
+            case ioe: IOException =>
+              if (!threwException) {
+                threwException = true
+                throw ioe
+              }
+          } finally {
+            if (threwException) {
+              remove(blockId)
+            }
           }
-      } finally {
-         if (threwException) {
-          remove(blockId)
         }
-      }
+        val finishTime = System.currentTimeMillis
+        logDebug("Block %s stored as %s file on disk in %d ms".format(
+          file.getName,
+          Utils.bytesToString(file.length()),
+          finishTime - startTime))
     }
-    val finishTime = System.currentTimeMillis
-    logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName,
-      Utils.bytesToString(file.length()),
-      finishTime - startTime))
   }
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
@@ -98,53 +103,60 @@ private[spark] class DiskStore(
   }
 
   def getBytes(blockId: BlockId): BlockData = {
-    val file = diskManager.getFile(blockId.name)
     val blockSize = getSize(blockId)
 
     securityManager.getIOEncryptionKey() match {
       case Some(key) =>
         // Encrypted blocks cannot be memory mapped; return a special object that does decryption
         // and provides InputStream / FileRegion implementations for reading the data.
-        new EncryptedBlockData(file, blockSize, conf, key)
-
+        blockMapper match {
+          case d: DiskBlockManager =>
+            new EncryptedBlockData(d.getFile(blockId), blockSize, conf, key)
+          case r: RemoteBlockManager =>
+            new EncryptedBlockData(null, blockSize, conf, key, r.getInputStream(blockId))
+        }
       case _ =>
-        new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, file, blockSize)
+        blockMapper match {
+          case d: DiskBlockManager =>
+            new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, d.getFile(blockId), blockSize)
+          case _: RemoteBlockManager =>
+            throw new SparkException("Cant read from non-encrypted remote block")
+        }
     }
   }
 
   def remove(blockId: BlockId): Boolean = {
-    blockSizes.remove(blockId)
-    val file = diskManager.getFile(blockId.name)
-    if (file.exists()) {
-      val ret = file.delete()
-      if (!ret) {
-        logWarning(s"Error deleting ${file.getPath()}")
-      }
-      ret
-    } else {
-      false
+    blockMapper match {
+      case d: DiskBlockManager =>
+        blockSizes.remove(blockId)
+        d.removeBlock(blockId)
+      case _: RemoteBlockManager =>
+        throw new IllegalAccessError("Remote Block Mapper does not support this writing feature")
     }
   }
 
   def contains(blockId: BlockId): Boolean = {
-    val file = diskManager.getFile(blockId.name)
-    file.exists()
+    blockMapper.containsBlock(blockId)
   }
 
   private def openForWrite(file: File): WritableByteChannel = {
-    val out = new FileOutputStream(file).getChannel()
-    try {
-      securityManager.getIOEncryptionKey().map { key =>
-        CryptoStreamUtils.createWritableChannel(out, conf, key)
-      }.getOrElse(out)
-    } catch {
-      case e: Exception =>
-        Closeables.close(out, true)
-        file.delete()
-        throw e
+    blockMapper match {
+      case _: DiskBlockManager =>
+        val out = new FileOutputStream(file).getChannel()
+        try {
+          securityManager.getIOEncryptionKey().map { key =>
+            CryptoStreamUtils.createWritableChannel(out, conf, key)
+          }.getOrElse(out)
+        } catch {
+          case e: Exception =>
+            Closeables.close(out, true)
+            file.delete()
+            throw e
+        }
+      case _: RemoteBlockManager =>
+        throw new IllegalAccessError("Remote Block Mapper does not support this writing feature")
     }
   }
-
 }
 
 private class DiskBlockData(
@@ -156,10 +168,10 @@ private class DiskBlockData(
   override def toInputStream(): InputStream = new FileInputStream(file)
 
   /**
-  * Returns a Netty-friendly wrapper for the block's data.
-  *
-  * Please see `ManagedBuffer.convertToNetty()` for more details.
-  */
+    * Returns a Netty-friendly wrapper for the block's data.
+    *
+    * Please see `ManagedBuffer.convertToNetty()` for more details.
+    */
   override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
 
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
@@ -181,7 +193,7 @@ private class DiskBlockData(
   override def toByteBuffer(): ByteBuffer = {
     require(blockSize < maxMemoryMapBytes,
       s"can't create a byte buffer of size $blockSize" +
-      s" since it exceeds ${Utils.bytesToString(maxMemoryMapBytes)}.")
+        s" since it exceeds ${Utils.bytesToString(maxMemoryMapBytes)}.")
     Utils.tryWithResource(open()) { channel =>
       if (blockSize < minMemoryMapBytes) {
         // For small files, directly read rather than memory map.
@@ -206,7 +218,8 @@ private[spark] class EncryptedBlockData(
     file: File,
     blockSize: Long,
     conf: SparkConf,
-    key: Array[Byte]) extends BlockData {
+    key: Array[Byte],
+    iStream: InputStream = null) extends BlockData {
 
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
@@ -254,13 +267,17 @@ private[spark] class EncryptedBlockData(
   override def dispose(): Unit = { }
 
   private def open(): ReadableByteChannel = {
-    val channel = new FileInputStream(file).getChannel()
-    try {
-      CryptoStreamUtils.createReadableChannel(channel, conf, key)
-    } catch {
-      case e: Exception =>
-        Closeables.close(channel, true)
-        throw e
+    if (iStream != null) {
+      Channels.newChannel(iStream)
+    } else {
+      val channel = new FileInputStream(file).getChannel()
+      try {
+        CryptoStreamUtils.createReadableChannel(channel, conf, key)
+      } catch {
+        case e: Exception =>
+          Closeables.close(channel, true)
+          throw e
+      }
     }
   }
 }

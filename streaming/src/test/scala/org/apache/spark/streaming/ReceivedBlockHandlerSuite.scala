@@ -27,7 +27,6 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
@@ -38,7 +37,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.DefaultShuffleServiceAddressProvider
+import org.apache.spark.shuffle.external.DefaultShuffleServiceAddressProvider
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._

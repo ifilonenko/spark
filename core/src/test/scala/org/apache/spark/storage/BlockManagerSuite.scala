@@ -31,7 +31,6 @@ import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
@@ -49,7 +48,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.DefaultShuffleServiceAddressProvider
+import org.apache.spark.shuffle.external.DefaultShuffleServiceAddressProvider
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
@@ -1018,7 +1017,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         case _ => fail("Updated block is neither list2 nor list4")
       }
     }
-    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
+    assert(store.blockStore.contains("list2"), "list2 was not in disk store")
     assert(store.memoryStore.contains("list4"), "list4 was not in memory store")
 
     // No updated blocks - list5 is too big to fit in store and nothing is kicked out
@@ -1036,11 +1035,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.memoryStore.contains("list5"), "list5 was in memory store")
 
     // disk store contains only list2
-    assert(!store.diskStore.contains("list1"), "list1 was in disk store")
-    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
-    assert(!store.diskStore.contains("list3"), "list3 was in disk store")
-    assert(!store.diskStore.contains("list4"), "list4 was in disk store")
-    assert(!store.diskStore.contains("list5"), "list5 was in disk store")
+    assert(!store.blockStore.contains("list1"), "list1 was in disk store")
+    assert(store.blockStore.contains("list2"), "list2 was not in disk store")
+    assert(!store.blockStore.contains("list3"), "list3 was in disk store")
+    assert(!store.blockStore.contains("list4"), "list4 was in disk store")
+    assert(!store.blockStore.contains("list5"), "list5 was in disk store")
 
     // remove block - list2 should be removed from disk
     val updatedBlocks6 = getUpdatedBlocks {
@@ -1050,7 +1049,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(updatedBlocks6.size === 1)
     assert(updatedBlocks6.head._1 === TestBlockId("list2"))
     assert(updatedBlocks6.head._2.storageLevel == StorageLevel.NONE)
-    assert(!store.diskStore.contains("list2"), "list2 was in disk store")
+    assert(!store.blockStore.contains("list2"), "list2 was in disk store")
   }
 
   test("query block statuses") {
@@ -1159,7 +1158,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("safely unroll blocks through putIterator (disk)") {
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
-    val diskStore = store.diskStore
+    val diskStore = store.blockStore
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]

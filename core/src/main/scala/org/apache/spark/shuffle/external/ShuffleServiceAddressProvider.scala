@@ -17,9 +17,15 @@
 
 package org.apache.spark.shuffle.external
 
-import java.io.{Closeable, InputStream}
+trait ShuffleServiceAddressProvider {
 
-private[spark] trait ShufflePartitionWriter extends Closeable {
-  def appendPartition(partitionId: Long, partitionInput: InputStream): Unit
-  def abort(exception: Throwable): Unit
+  def start(): Unit = {}
+
+  def getShuffleServiceAddresses(): List[(String, Int)]
+
+  def stop(): Unit = {}
+}
+
+private[spark] object DefaultShuffleServiceAddressProvider extends ShuffleServiceAddressProvider {
+  override def getShuffleServiceAddresses(): List[(String, Int)] = List.empty[(String, Int)]
 }

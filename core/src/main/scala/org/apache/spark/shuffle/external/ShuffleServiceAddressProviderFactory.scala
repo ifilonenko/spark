@@ -15,17 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.shuffle.external
 
-trait ShuffleServiceAddressProvider {
+import org.apache.spark.SparkConf
 
-  def start(): Unit = {}
+trait ShuffleServiceAddressProviderFactory {
+  def canCreate(masterUrl: String): Boolean
 
-  def getShuffleServiceAddresses(): List[(String, Int)]
-
-  def stop(): Unit = {}
-}
-
-private[spark] object DefaultShuffleServiceAddressProvider extends ShuffleServiceAddressProvider {
-  override def getShuffleServiceAddresses(): List[(String, Int)] = List.empty[(String, Int)]
+  def create(conf: SparkConf): ShuffleServiceAddressProvider
 }

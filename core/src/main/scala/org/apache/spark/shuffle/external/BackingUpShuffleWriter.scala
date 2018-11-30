@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.shuffle.external
 
 import java.io.File
 import java.nio.ByteBuffer
@@ -32,6 +32,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, UploadShuffleFileStream, UploadShuffleIndexFileStream}
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.scheduler.{MapStatus, RelocatedMapStatus}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.BlockManagerId
 
 class BackingUpShuffleWriter[K, V](
@@ -46,11 +47,13 @@ class BackingUpShuffleWriter[K, V](
     appId: String,
     execId: String,
     shuffleId: Int,
-    mapId: Int)
+    mapId: Int,
+    backupShuffleDataIO: ShuffleDataIO = null)
   extends ShuffleWriter[K, V] with Logging {
 
   private implicit val backupExecutorContext = ExecutionContext.fromExecutorService(backupExecutor)
 
+  private val writeSupport = backupShuffleDataIO.writeSupport()
   /** Write a sequence of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     delegateWriter.write(records)
@@ -90,6 +93,7 @@ class BackingUpShuffleWriter[K, V](
   private def backupFile(
       fileToBackUp: File,
       backupFileRequest: BlockTransferMessage) {
+    backupShuffleDataIO.writeSupport()
     val dataFileBuffer = new FileSegmentManagedBuffer(
       transportConf, fileToBackUp, 0, fileToBackUp.length())
     val uploadBackupRequestBuffer = new NioManagedBuffer(backupFileRequest.toByteBuffer)

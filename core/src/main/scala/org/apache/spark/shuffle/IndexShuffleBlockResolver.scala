@@ -27,6 +27,7 @@ import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
+import org.apache.spark.shuffle.external._
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -43,13 +44,27 @@ import org.apache.spark.util.Utils
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
 private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
-    _blockManager: BlockManager = null)
+    _blockManager: BlockManager = null,
+    shuffleDataIO: ShuffleDataIO = null)
   extends ShuffleBlockResolver
   with Logging {
 
+  private lazy val appId = conf.getAppId
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+
+  private var shuffleWriteSupport: ShuffleWriteSupport = _
+
+  private var shuffleReadSupport: ShuffleReadSupport = _
+
+  private var isExternalFileSystem = false
+
+  if (shuffleDataIO != null) {
+    shuffleWriteSupport = shuffleDataIO.writeSupport()
+    shuffleReadSupport = shuffleDataIO.readSupport()
+    isExternalFileSystem = true
+  }
 
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
@@ -219,6 +234,15 @@ private[spark] class IndexShuffleBlockResolver(
         offset,
         nextOffset - offset)
     } finally {
+      if (isExternalFileSystem) {
+        val writer = shuffleWriteSupport.newPartitionWriter(appId, blockId.shuffleId, blockId.mapId)
+        try {
+          writer.appendPartition(blockId.reduceId, in)
+        } catch {
+          case e: Exception =>
+            writer.abort(e)
+        }
+      }
       in.close()
     }
   }

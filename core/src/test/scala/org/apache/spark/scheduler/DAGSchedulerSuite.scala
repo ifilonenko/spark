@@ -26,14 +26,14 @@ import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.shuffle.{DefaultShuffleServiceAddressProvider, FetchFailedException, MetadataFetchFailedException}
+import org.apache.spark.shuffle.external.DefaultShuffleServiceAddressProvider
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
 

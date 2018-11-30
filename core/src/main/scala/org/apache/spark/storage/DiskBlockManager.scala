@@ -32,7 +32,8 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  * Block files are hashed among the directories listed in spark.local.dir (or in
  * SPARK_LOCAL_DIRS, if it's set).
  */
-private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolean) extends Logging {
+private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolean)
+  extends Logging with BlockMapper {
 
   private[spark] val subDirsPerLocalDir = conf.getInt("spark.diskStore.subDirectories", 64)
 
@@ -80,8 +81,21 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
   /** Check if disk block manager has a block. */
-  def containsBlock(blockId: BlockId): Boolean = {
+  override def containsBlock(blockId: BlockId): Boolean = {
     getFile(blockId.name).exists()
+  }
+
+  def removeBlock(blockId: BlockId): Boolean = {
+    val file = getFile(blockId)
+    if (file.exists()) {
+      val ret = file.delete()
+      if (!ret) {
+        logWarning(s"Error deleting ${file.getPath()}")
+      }
+      ret
+    } else {
+      false
+    }
   }
 
   /** List all the files currently stored on disk by the disk manager. */

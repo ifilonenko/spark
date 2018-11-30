@@ -21,13 +21,13 @@ import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.util.Random
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.NoOpRpcHandler
 import org.apache.spark.shuffle._
+import org.apache.spark.shuffle.external.BackingUpShuffleWriter
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -178,7 +178,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           addressAndClient._3.createClient(
             addressAndClient._2.getHost, addressAndClient._2.getPort)
         new BackingUpShuffleWriter(
-          shuffleBlockResolver,
+          new IndexShuffleBlockResolver(conf, shuffleDataIO = new DefaultShuffleDataIO()),
           baseWriter,
           transportClient,
           backupShuffleTransportConf,
@@ -186,6 +186,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           ThreadUtils.newDaemonCachedThreadPool("backup-shuffle-files"),
           addressAndClient._1._1,
           addressAndClient._1._2,
+          new DefaultShuffleDataIO(),
           conf.getAppId,
           env.blockManager.blockManagerId.executorId,
           handle.shuffleId,

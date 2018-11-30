@@ -21,12 +21,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watch, Watcher}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.k8s._
-import org.apache.spark.shuffle.ShuffleServiceAddressProvider
+import org.apache.spark.shuffle.external.ShuffleServiceAddressProvider
 import org.apache.spark.util.Utils
 
 class KubernetesShuffleServiceAddressProvider(

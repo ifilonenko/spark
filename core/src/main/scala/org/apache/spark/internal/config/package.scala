@@ -108,6 +108,12 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
+  private[spark] val SHUFFLE_REMOTE_READ_OVERRIDE =
+    ConfigBuilder("spark.shuffle.externalShuffleBackup.remote")
+      .booleanConf
+      .createWithDefault(false)
+
+
   private[spark] val EXECUTOR_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).stringConf.createOptional
 

@@ -14,12 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.shuffle
 
-import org.apache.spark.SparkConf
+package org.apache.spark.storage
 
-trait ShuffleServiceAddressProviderFactory {
-  def canCreate(masterUrl: String): Boolean
-
-  def create(conf: SparkConf): ShuffleServiceAddressProvider
+/**
+ * Creates and maintains the logical mapping between logical blocks and physical on-disk
+ * locations. One block is mapped to one file with a name given by its BlockId.
+ */
+private[spark] trait BlockMapper {
+  def containsBlock(blockId: BlockId): Boolean
 }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle.external
 
-private[spark]
-
-trait ShuffleWriteSupport {
+private[spark] trait ShuffleWriteSupport {
   def newPartitionWriter(appId: String, shuffleId: Int, mapId: Int): ShufflePartitionWriter
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.shuffle.external
 
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.shuffle._

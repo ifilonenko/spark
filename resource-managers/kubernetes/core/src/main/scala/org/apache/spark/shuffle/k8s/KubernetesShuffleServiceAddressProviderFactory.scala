@@ -19,7 +19,8 @@ package org.apache.spark.shuffle.k8s
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
-import org.apache.spark.shuffle.{DefaultShuffleServiceAddressProvider, ShuffleServiceAddressProvider, ShuffleServiceAddressProviderFactory}
+import org.apache.spark.shuffle.external.{DefaultShuffleServiceAddressProvider, ShuffleServiceAddressProvider, ShuffleServiceAddressProviderFactory}
+import org.apache.spark.shuffle.DefaultShuffleServiceAddressProvider
 import org.apache.spark.util.ThreadUtils
 
 class KubernetesShuffleServiceAddressProviderFactory extends ShuffleServiceAddressProviderFactory {
