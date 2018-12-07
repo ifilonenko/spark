@@ -89,6 +89,9 @@ public class ExecutorShuffleInfo implements Encodable {
     String[] localDirs = Encoders.StringArrays.decode(buf);
     int subDirsPerLocalDir = buf.readInt();
     String shuffleManager = Encoders.Strings.decode(buf);
-    return new ExecutorShuffleInfo(localDirs, subDirsPerLocalDir, shuffleManager);
+    return new ExecutorShuffleInfo(
+            localDirs,
+            subDirsPerLocalDir,
+            shuffleManager);
   }
 }

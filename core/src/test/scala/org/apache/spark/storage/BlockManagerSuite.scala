@@ -25,14 +25,12 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 import scala.reflect.ClassTag
-
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
@@ -50,6 +48,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
+import org.apache.spark.shuffle.external.DefaultShuffleServiceAddressProvider
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
@@ -72,7 +71,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   var master: BlockManagerMaster = null
   val securityMgr = new SecurityManager(new SparkConf(false))
   val bcastManager = new BroadcastManager(true, new SparkConf(false), securityMgr)
-  val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false), bcastManager, true)
+  val mapOutputTracker = new MapOutputTrackerMaster(
+      new SparkConf(false), bcastManager, true, DefaultShuffleServiceAddressProvider)
   val shuffleManager = new SortShuffleManager(new SparkConf(false))
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
@@ -1017,7 +1017,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         case _ => fail("Updated block is neither list2 nor list4")
       }
     }
-    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
+    assert(store.blockStore.contains("list2"), "list2 was not in disk store")
     assert(store.memoryStore.contains("list4"), "list4 was not in memory store")
 
     // No updated blocks - list5 is too big to fit in store and nothing is kicked out
@@ -1035,11 +1035,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.memoryStore.contains("list5"), "list5 was in memory store")
 
     // disk store contains only list2
-    assert(!store.diskStore.contains("list1"), "list1 was in disk store")
-    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
-    assert(!store.diskStore.contains("list3"), "list3 was in disk store")
-    assert(!store.diskStore.contains("list4"), "list4 was in disk store")
-    assert(!store.diskStore.contains("list5"), "list5 was in disk store")
+    assert(!store.blockStore.contains("list1"), "list1 was in disk store")
+    assert(store.blockStore.contains("list2"), "list2 was not in disk store")
+    assert(!store.blockStore.contains("list3"), "list3 was in disk store")
+    assert(!store.blockStore.contains("list4"), "list4 was in disk store")
+    assert(!store.blockStore.contains("list5"), "list5 was in disk store")
 
     // remove block - list2 should be removed from disk
     val updatedBlocks6 = getUpdatedBlocks {
@@ -1049,7 +1049,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(updatedBlocks6.size === 1)
     assert(updatedBlocks6.head._1 === TestBlockId("list2"))
     assert(updatedBlocks6.head._2.storageLevel == StorageLevel.NONE)
-    assert(!store.diskStore.contains("list2"), "list2 was in disk store")
+    assert(!store.blockStore.contains("list2"), "list2 was in disk store")
   }
 
   test("query block statuses") {
@@ -1158,7 +1158,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("safely unroll blocks through putIterator (disk)") {
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
-    val diskStore = store.diskStore
+    val diskStore = store.blockStore
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
@@ -1446,6 +1446,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int,
         execId: String,
         blockIds: Array[String],
+        isRemote: Boolean,
         listener: BlockFetchingListener,
         tempFileManager: DownloadFileManager): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
@@ -1474,13 +1475,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int,
         execId: String,
         blockId: String,
+        isRemote: Boolean,
         tempFileManager: DownloadFileManager): ManagedBuffer = {
       numCalls += 1
       this.tempFileManager = tempFileManager
       if (numCalls <= maxFailures) {
         throw new RuntimeException("Failing block fetch in the mock block transfer service")
       }
-      super.fetchBlockSync(host, port, execId, blockId, tempFileManager)
+      super.fetchBlockSync(host, port, execId, blockId, isRemote, tempFileManager)
     }
   }
 }

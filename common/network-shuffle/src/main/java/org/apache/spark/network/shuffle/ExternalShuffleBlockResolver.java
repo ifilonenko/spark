@@ -18,7 +18,12 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -44,6 +49,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.LevelDBProvider.StoreVersion;
@@ -75,6 +81,8 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
 
+  private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> backupExecutors;
+
   /**
    *  Caches index file information so that we can avoid open/close the index files
    *  for each block fetch.
@@ -94,6 +102,7 @@ public class ExternalShuffleBlockResolver {
   private final List<String> knownManagers = Arrays.asList(
     "org.apache.spark.shuffle.sort.SortShuffleManager",
     "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager");
+
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
@@ -144,6 +153,12 @@ public class ExternalShuffleBlockResolver {
       String execId,
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
+    if (backupExecutors.containsKey(fullId)) {
+      throw new UnsupportedOperationException(
+          String.format(
+              "Executor %s cannot be registered for both primary shuffle management and backup" +
+                  " shuffle management.", fullId));
+    }
     logger.info("Registered executor {} with {}", fullId, executorInfo);
     if (!knownManagers.contains(executorInfo.shuffleManager)) {
       throw new UnsupportedOperationException(
@@ -161,6 +176,32 @@ public class ExternalShuffleBlockResolver {
     executors.put(fullId, executorInfo);
   }
 
+  private StreamCallbackWithID getFileWriterStreamCallback(
+      String appId,
+      String execId,
+      int shuffleId,
+      int mapId,
+      String extension,
+      FileWriterStreamCallback.BackupFileType backupFileType) {
+    AppExecId fullId = new AppExecId(appId, execId);
+    ExecutorShuffleInfo executor = backupExecutors.get(fullId);
+    if (executor == null) {
+      throw new RuntimeException(
+          String.format("Executor is not registered for shuffle file backups" +
+              " (appId=%s, execId=%s)", appId, execId));
+    }
+    File backedUpFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+        "shuffle_" + shuffleId + "_" + mapId + "_0." + extension);
+    FileWriterStreamCallback streamCallback = new FileWriterStreamCallback(
+        fullId,
+        shuffleId,
+        mapId,
+        backedUpFile,
+        backupFileType);
+    streamCallback.open();
+    return streamCallback;
+  }
+
   /**
    * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId). We make assumptions
    * about how the hash and sort based shuffles store their data.
@@ -173,6 +214,13 @@ public class ExternalShuffleBlockResolver {
       int reduceId) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
+      logger.info("application's shuffle data isn't in main file system, checking backups..." +
+          "app id: {}, executor id: {}, shuffle id: {}, map id: {}, reduce id: {}",
+          appId, execId, shuffleId, mapId, reduceId);
+      executor = backupExecutors.get(new AppExecId(appId, execId));
+    }
+    if (executor == null) {
+      logger.warn("Executor is not registered (appId: {}, execId: {}", appId, execId);
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }

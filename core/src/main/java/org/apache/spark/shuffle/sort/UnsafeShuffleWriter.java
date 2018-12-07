@@ -425,6 +425,65 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   /**
+   * Merges spill files using the ShufflePartitionWriter API.
+   */
+  private long[] mergeSpillsWithPluggableWriter(
+        SpillInfo[] spills,
+        @Nullable CompressionCodec compressionCodec) throws IOException {
+    assert (spills.length >= 2);
+    assert(blockManager. != null);
+    final int numPartitions = partitioner.numPartitions();
+    final long[] partitionLengths = new long[numPartitions];
+    final InputStream[] spillInputStreams = new InputStream[spills.length];
+    boolean threwException = true;
+    try (ShufflePartitionWriter writer = writeSupport.newPartitionWriter(
+            sparkConf.getAppId(), shuffleId, mapId)) {
+      try {
+        for (int i = 0; i < spills.length; i++) {
+          spillInputStreams[i] = new NioBufferedFileInputStream(
+                  spills[i].file,
+                  inputBufferSizeInBytes);
+        }
+        for (int partition = 0; partition < numPartitions; partition++) {
+          for (int i = 0; i < spills.length; i++) {
+            final long partitionLengthInSpill = spills[i].partitionLengths[partition];
+            if (partitionLengthInSpill > 0) {
+              InputStream partitionInputStream = new LimitedInputStream(spillInputStreams[i],
+                      partitionLengthInSpill, false);
+              try {
+                partitionInputStream = blockManager.serializerManager().wrapForEncryption(
+                        partitionInputStream);
+                if (compressionCodec != null) {
+                  partitionInputStream = compressionCodec.compressedInputStream(partitionInputStream);
+                }
+                partitionLengths[partition] = writer.appendPartition(partition, partitionInputStream);
+              } finally {
+                partitionInputStream.close();
+              }
+            }
+          }
+        }
+      } catch (Exception e) {
+        try {
+          writer.abort();
+        } catch (Exception e2) {
+          logger.warn("Failed to close shuffle writer upon aborting.", e2);
+        }
+      }
+      threwException = false;
+    } finally {
+      // To avoid masking exceptions that caused us to prematurely enter the finally block, only
+      // throw exceptions during cleanup if threwException == false.
+      for (InputStream stream : spillInputStreams) {
+        Closeables.close(stream, threwException);
+      }
+    }
+    return partitionLengths;
+  }
+
+
+
+  /**
    * Merges spill files by using NIO's transferTo to concatenate spill partitions' bytes.
    * This is only safe when the IO compression codec and serializer support concatenation of
    * serialized streams.

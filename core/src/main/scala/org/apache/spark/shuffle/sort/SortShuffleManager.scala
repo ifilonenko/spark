@@ -17,11 +17,18 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.TransportContext
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.server.NoOpRpcHandler
 import org.apache.spark.shuffle._
+import org.apache.spark.shuffle.external.ShuffleDataIO
+import org.apache.spark.util.ThreadUtils
 
 /**
  * In sort-based shuffle, incoming records are sorted according to their target partition ids, then
@@ -81,6 +88,26 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
+  private val backupShuffleTransportConf = SparkTransportConf.fromSparkConf(
+    conf, "shuffle", 2)
+
+  private lazy val remoteShuffleTransportClients = SparkEnv
+    .get
+      .blockManager.
+    .blockManager
+    .getRemoteShuffleServiceAddresses()
+    .map(address => {
+      val addressAsUri = URI.create(s"spark://${address._1}:${address._2}")
+      val transportContext = new TransportContext(
+        backupShuffleTransportConf,
+        new NoOpRpcHandler(),
+        false)
+      (address, addressAsUri, transportContext.createClientFactory())
+    })
+
+  // TODO: Fill out defaults
+  private val shuffleDataIO: ShuffleDataIO = null
+
   /**
    * Obtains a [[ShuffleHandle]] to pass to tasks.
    */
@@ -116,7 +143,12 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
+      startPartition,
+      endPartition,
+      context,
+      conf.getAppId,
+      shuffleDataIO.readSupport())
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
@@ -174,7 +206,7 @@ private[spark] object SortShuffleManager extends Logging {
    * buffering map outputs in a serialized form. This is an extreme defensive programming measure,
    * since it's extremely unlikely that a single shuffle produces over 16 million output partitions.
    * */
-  val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
+  val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE: Int =
     PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
 
   /**

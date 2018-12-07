@@ -34,7 +34,9 @@ import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.shuffle.protocol.RegisterDriver;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
+import org.apache.spark.network.shuffle.protocol.RegisterExecutorForBackupsOnly;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -43,7 +45,7 @@ import org.apache.spark.network.util.TransportConf;
  * BlockTransferService), which has the downside of losing the shuffle data if we lose the
  * executors.
  */
-public class ExternalShuffleClient extends ShuffleClient {
+public class ExternalShuffleClient extends ShuffleClient{
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleClient.class);
 
   private final TransportConf conf;
@@ -90,6 +92,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       int port,
       String execId,
       String[] blockIds,
+      boolean isRemote,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager) {
     checkInit();
@@ -141,6 +144,20 @@ public class ExternalShuffleClient extends ShuffleClient {
     checkInit();
     try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
       ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
+      client.sendRpcSync(registerMessage, registrationTimeoutMs);
+    }
+  }
+
+  public void registerWithRemoteShuffleServer(
+      String driverHostPort,
+      String host,
+      int port,
+      String execId,
+      String shuffleManager) throws IOException, InterruptedException{
+    checkInit();
+    try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
+      ByteBuffer registerMessage = new RegisterExecutorForBackupsOnly(
+          driverHostPort, appId, execId, shuffleManager).toByteBuffer();
       client.sendRpcSync(registerMessage, registrationTimeoutMs);
     }
   }
