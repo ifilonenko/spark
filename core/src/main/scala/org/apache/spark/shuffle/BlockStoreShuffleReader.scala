@@ -20,7 +20,8 @@ package org.apache.spark.shuffle
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
+import org.apache.spark.shuffle.external.ShuffleReadSupport
+import org.apache.spark.storage._
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -33,6 +34,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
     startPartition: Int,
     endPartition: Int,
     context: TaskContext,
+    appId: String,
+    shuffleReadSupport: ShuffleReadSupport = null,
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
@@ -42,20 +45,35 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val wrappedStreams = new ShuffleBlockFetcherIterator(
-      context,
-      blockManager.shuffleClient,
-      blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(
-        handle.shuffleId, startPartition, endPartition, context.attemptNumber() > 0),
-      serializerManager.wrapStream,
-      // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
-      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
-      SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue),
-      SparkEnv.get.conf.get(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS),
-      SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
-      SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true))
-
+    val wrappedStreams = if (shuffleReadSupport != null) {
+      getBlockIdsGroupedByMapIds(handle.shuffleId, startPartition, endPartition)
+        .flatMap { case (mapId, blockIds) =>
+          val reader = shuffleReadSupport.newPartitionReader(
+            appId, handle.shuffleId, mapId)
+          blockIds.map {
+            case ShuffleBlockId(_, _, reduceId) => reader.fetchPartition(reduceId)
+            case ShuffleDataBlockId(_, _, reduceId) => reader.fetchPartition(reduceId)
+            case invalid =>
+              throw new IllegalArgumentException(s"Invalid block id $invalid")
+          }
+        }
+    } else {
+      val mapSizesByExecId =
+        mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition)
+      new ShuffleBlockFetcherIterator(
+        context,
+        blockManager.shuffleClient,
+        blockManager,
+        mapSizesByExecId,
+        serializerManager.wrapStream,
+        // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
+        SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
+        SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue),
+        SparkEnv.get.conf.get(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS),
+        SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
+        SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true),
+        readMetrics)
+    }
     val serializerInstance = dep.serializer.newInstance()
 
     // Create a key/value iterator for each stream
@@ -120,5 +138,26 @@ private[spark] class BlockStoreShuffleReader[K, C](
         // or(and) sorter may have consumed previous interruptible iterator.
         new InterruptibleIterator[Product2[K, C]](context, resultIter)
     }
+  }
+    private def getBlockIdsGroupedByMapIds(
+        shuffleId: Int, startPartition: Int, endPartition: Int): Iterator[(Int, Seq[BlockId])] = {
+      mapOutputTracker.getMapSizesByExecutorId(shuffleId, startPartition, endPartition)
+        .flatMap(_._2)
+        .map(_._1)
+        .toStream
+        .filter { blockId =>
+          blockId match {
+            case ShuffleBlockId(_, _, _) => true
+            case ShuffleDataBlockId(_, _, _) => true
+            case _ => false
+          }
+        }
+        .groupBy {
+          case ShuffleBlockId(_, mapId, _) => mapId
+          case ShuffleDataBlockId(_, mapId, _) => mapId
+          case blockId =>
+            throw new IllegalArgumentException(s"Invalid block id: $blockId")
+        }.mapValues(_.toSeq)
+        .iterator
   }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.external
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.shuffle._
 
-private[spark] class ExternalFallbackShuffleClient(
+private[spark] class ExternalRemoteShuffleClient(
     externalShuffleClient: ExternalShuffleClient,
     baseBlockTransferService: BlockTransferService) extends ShuffleClient {
 
@@ -34,21 +34,21 @@ private[spark] class ExternalFallbackShuffleClient(
       port: Int,
       execId: String,
       blockIds: Array[String],
-      isBackup: Boolean,
+      isRemote: Boolean,
       listener: BlockFetchingListener,
       downloadFileManager: DownloadFileManager): Unit = {
-    if (isBackup) {
+    if (isRemote) {
       externalShuffleClient.fetchBlocks(
         host,
         port,
         execId,
         blockIds,
-        isBackup,
+        isRemote,
         listener,
         downloadFileManager)
     } else {
       baseBlockTransferService.fetchBlocks(
-        host, port, execId, blockIds, isBackup, listener, downloadFileManager)
+        host, port, execId, blockIds, isRemote, listener, downloadFileManager)
     }
   }
 
@@ -57,11 +57,13 @@ private[spark] class ExternalFallbackShuffleClient(
     externalShuffleClient.close()
   }
 
-  def registerWithShuffleServerForBackups(
+  def registerWithRemoteShuffleServer(
+      driverHostPort: String,
       host: String,
       port: Int,
       execId: String,
       shuffleManager: String) : Unit = {
-    externalShuffleClient.registerWithShuffleServerForBackups(host, port, execId, shuffleManager)
+    externalShuffleClient.registerWithRemoteShuffleServer(
+      driverHostPort, host, port, execId, shuffleManager)
   }
 }

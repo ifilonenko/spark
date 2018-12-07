@@ -27,7 +27,7 @@ import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.NoOpRpcHandler
 import org.apache.spark.shuffle._
-import org.apache.spark.shuffle.external.BackingUpShuffleWriter
+import org.apache.spark.shuffle.external.ShuffleDataIO
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -91,10 +91,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   private val backupShuffleTransportConf = SparkTransportConf.fromSparkConf(
     conf, "shuffle", 2)
 
-  private lazy val backupShuffleTransportClients = SparkEnv
+  private lazy val remoteShuffleTransportClients = SparkEnv
     .get
+      .blockManager.
     .blockManager
-    .getBackupShuffleServiceAddresses()
+    .getRemoteShuffleServiceAddresses()
     .map(address => {
       val addressAsUri = URI.create(s"spark://${address._1}:${address._2}")
       val transportContext = new TransportContext(
@@ -103,6 +104,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
         false)
       (address, addressAsUri, transportContext.createClientFactory())
     })
+
+  // TODO: Fill out defaults
+  private val shuffleDataIO: ShuffleDataIO = null
 
   /**
    * Obtains a [[ShuffleHandle]] to pass to tasks.
@@ -139,7 +143,12 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
+      startPartition,
+      endPartition,
+      context,
+      conf.getAppId,
+      shuffleDataIO.readSupport())
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
@@ -150,7 +159,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     numMapsForShuffle.putIfAbsent(
       handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
     val env = SparkEnv.get
-    val baseWriter = handle match {
+    handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new UnsafeShuffleWriter(
           env.blockManager,
@@ -171,27 +180,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
         new SortShuffleWriter(shuffleBlockResolver, other, mapId, context)
     }
-    Random.shuffle(backupShuffleTransportClients)
-      .headOption
-      .map(addressAndClient => {
-        val transportClient =
-          addressAndClient._3.createClient(
-            addressAndClient._2.getHost, addressAndClient._2.getPort)
-        new BackingUpShuffleWriter(
-          new IndexShuffleBlockResolver(conf, shuffleDataIO = new DefaultShuffleDataIO()),
-          baseWriter,
-          transportClient,
-          backupShuffleTransportConf,
-          env.mapOutputTracker,
-          ThreadUtils.newDaemonCachedThreadPool("backup-shuffle-files"),
-          addressAndClient._1._1,
-          addressAndClient._1._2,
-          new DefaultShuffleDataIO(),
-          conf.getAppId,
-          env.blockManager.blockManagerId.executorId,
-          handle.shuffleId,
-          mapId)
-      }).getOrElse(baseWriter)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
@@ -207,7 +195,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
-    backupShuffleTransportClients.foreach(_._3.close())
   }
 }
 

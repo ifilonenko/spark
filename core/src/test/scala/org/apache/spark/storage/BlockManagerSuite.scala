@@ -1446,7 +1446,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int,
         execId: String,
         blockIds: Array[String],
-        isBackup: Boolean,
+        isRemote: Boolean,
         listener: BlockFetchingListener,
         tempFileManager: DownloadFileManager): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
@@ -1475,14 +1475,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int,
         execId: String,
         blockId: String,
-        isBackup: Boolean,
+        isRemote: Boolean,
         tempFileManager: DownloadFileManager): ManagedBuffer = {
       numCalls += 1
       this.tempFileManager = tempFileManager
       if (numCalls <= maxFailures) {
         throw new RuntimeException("Failing block fetch in the mock block transfer service")
       }
-      super.fetchBlockSync(host, port, execId, blockId, isBackup, tempFileManager)
+      super.fetchBlockSync(host, port, execId, blockId, isRemote, tempFileManager)
     }
   }
 }

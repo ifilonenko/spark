@@ -67,7 +67,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       port: Int,
       execId: String,
       blockIds: Array[String],
-      isBackup: Boolean,
+      isRemote: Boolean,
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager): Unit
 
@@ -93,11 +93,11 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       port: Int,
       execId: String,
       blockId: String,
-      isBackup: Boolean,
+      isRemote: Boolean,
       tempFileManager: DownloadFileManager): ManagedBuffer = {
     // A monitor for the thread to wait on.
     val result = Promise[ManagedBuffer]()
-    fetchBlocks(host, port, execId, Array(blockId), isBackup,
+    fetchBlocks(host, port, execId, Array(blockId), isRemote,
       new BlockFetchingListener {
         override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
           result.failure(exception)

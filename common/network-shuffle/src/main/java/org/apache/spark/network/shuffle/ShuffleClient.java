@@ -53,7 +53,7 @@ public abstract class ShuffleClient implements Closeable {
       int port,
       String execId,
       String[] blockIds,
-      boolean isBackup,
+      boolean isRemote,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager);
 

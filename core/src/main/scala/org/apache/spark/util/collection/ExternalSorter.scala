@@ -22,13 +22,12 @@ import java.util.Comparator
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import com.google.common.io.ByteStreams
-
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer._
+import org.apache.spark.shuffle.external.ShuffleDataIO
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
@@ -682,13 +681,13 @@ private[spark] class ExternalSorter[K, V, C](
    */
   def writePartitionedFile(
       blockId: BlockId,
-      outputFile: File): Array[Long] = {
+      outputFile: File,
+      _shuffleDataIO: ShuffleDataIO = null): Array[Long] = {
 
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
     val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
       context.taskMetrics().shuffleWriteMetrics)
-
     if (spills.isEmpty) {
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer

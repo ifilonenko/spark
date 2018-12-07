@@ -40,7 +40,7 @@ class BlockManagerId private (
     private var host_ : String,
     private var port_ : Int,
     private var topologyInfo_ : Option[String],
-    private var isBackup_ : Boolean = false)
+    private var isRemote_ : Boolean = false)
   extends Externalizable {
 
   private def this() = this(null, null, 0, None)  // For deserialization only
@@ -63,7 +63,7 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-  def isBackup: Boolean = isBackup_
+  def isRemote: Boolean = isRemote_
 
   def topologyInfo: Option[String] = topologyInfo_
 
@@ -77,7 +77,7 @@ class BlockManagerId private (
     out.writeUTF(executorId_)
     out.writeUTF(host_)
     out.writeInt(port_)
-    out.writeBoolean(isBackup)
+    out.writeBoolean(isRemote)
     out.writeBoolean(topologyInfo_.isDefined)
     // we only write topologyInfo if we have it
     topologyInfo.foreach(out.writeUTF(_))
@@ -87,7 +87,7 @@ class BlockManagerId private (
     executorId_ = in.readUTF()
     host_ = in.readUTF()
     port_ = in.readInt()
-    isBackup_ = in.readBoolean()
+    isRemote_ = in.readBoolean()
     val isTopologyInfoAvailable = in.readBoolean()
     topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
   }
@@ -131,9 +131,9 @@ private[spark] object BlockManagerId {
       host: String,
       port: Int,
       topologyInfo: Option[String] = None,
-      isBackup: Boolean = false): BlockManagerId =
+      isRemote: Boolean = false): BlockManagerId =
     getCachedBlockManagerId(new BlockManagerId(
-        execId, host, port, topologyInfo, isBackup))
+        execId, host, port, topologyInfo, isRemote))
 
   def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()

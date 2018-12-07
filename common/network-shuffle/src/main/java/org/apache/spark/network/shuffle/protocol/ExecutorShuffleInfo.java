@@ -29,10 +29,6 @@ import org.apache.spark.network.protocol.Encoders;
 
 /** Contains all configuration necessary for locating the shuffle files of an executor. */
 public class ExecutorShuffleInfo implements Encodable {
-  /** The set of remote hosts that the executor stores its back shuffle files in. */
-  public final String[] backupHosts;
-  /** The set of remote ports that the executor stores its back shuffle files in. */
-  public final String[] backupPorts;
   /** The base set of local directories that the executor stores its shuffle files in. */
   public final String[] localDirs;
   /** Number of subdirectories created within each localDir. */
@@ -42,14 +38,9 @@ public class ExecutorShuffleInfo implements Encodable {
 
   @JsonCreator
   public ExecutorShuffleInfo(
-      @JsonProperty("backupHosts") String [] backupHosts,
-      @JsonProperty("backupPorts") String[] backupPorts,
       @JsonProperty("localDirs") String[] localDirs,
       @JsonProperty("subDirsPerLocalDir") int subDirsPerLocalDir,
       @JsonProperty("shuffleManager") String shuffleManager) {
-    this.backupHosts = backupHosts;
-    this.backupPorts = backupPorts;
-    assert(backupHosts.length == backupPorts.length);
     this.localDirs = localDirs;
     this.subDirsPerLocalDir = subDirsPerLocalDir;
     this.shuffleManager = shuffleManager;
@@ -57,15 +48,12 @@ public class ExecutorShuffleInfo implements Encodable {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(subDirsPerLocalDir, shuffleManager) * 41 + Arrays.hashCode(localDirs)
-            + Arrays.hashCode(backupHosts) + Arrays.hashCode(backupPorts);
+    return Objects.hashCode(subDirsPerLocalDir, shuffleManager) * 41 + Arrays.hashCode(localDirs);
   }
 
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("backupHosts", Arrays.toString(backupHosts))
-      .add("backupPorts", Arrays.toString(backupPorts))
       .add("localDirs", Arrays.toString(localDirs))
       .add("subDirsPerLocalDir", subDirsPerLocalDir)
       .add("shuffleManager", shuffleManager)
@@ -76,9 +64,7 @@ public class ExecutorShuffleInfo implements Encodable {
   public boolean equals(Object other) {
     if (other != null && other instanceof ExecutorShuffleInfo) {
       ExecutorShuffleInfo o = (ExecutorShuffleInfo) other;
-      return Arrays.equals(backupHosts, o.backupHosts)
-        && Arrays.equals(backupPorts, o.backupPorts)
-        && Arrays.equals(localDirs, o.localDirs)
+      return Arrays.equals(localDirs, o.localDirs)
         && Objects.equal(subDirsPerLocalDir, o.subDirsPerLocalDir)
         && Objects.equal(shuffleManager, o.shuffleManager);
     }
@@ -87,31 +73,23 @@ public class ExecutorShuffleInfo implements Encodable {
 
   @Override
   public int encodedLength() {
-    return Encoders.StringArrays.encodedLength(backupHosts)
-        + Encoders.StringArrays.encodedLength(backupPorts)
-        + Encoders.StringArrays.encodedLength(localDirs)
+    return Encoders.StringArrays.encodedLength(localDirs)
         + 4 // int
         + Encoders.Strings.encodedLength(shuffleManager);
   }
 
   @Override
   public void encode(ByteBuf buf) {
-    Encoders.StringArrays.encode(buf, backupHosts);
-    Encoders.StringArrays.encode(buf, backupPorts);
     Encoders.StringArrays.encode(buf, localDirs);
     buf.writeInt(subDirsPerLocalDir);
     Encoders.Strings.encode(buf, shuffleManager);
   }
 
   public static ExecutorShuffleInfo decode(ByteBuf buf) {
-    String[] backupHosts = Encoders.StringArrays.decode(buf);
-    String[] backupPorts = Encoders.StringArrays.decode(buf);
     String[] localDirs = Encoders.StringArrays.decode(buf);
     int subDirsPerLocalDir = buf.readInt();
     String shuffleManager = Encoders.Strings.decode(buf);
     return new ExecutorShuffleInfo(
-            backupHosts,
-            backupPorts,
             localDirs,
             subDirsPerLocalDir,
             shuffleManager);

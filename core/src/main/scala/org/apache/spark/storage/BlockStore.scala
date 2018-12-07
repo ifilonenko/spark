@@ -62,7 +62,7 @@ private[spark] class BlockStore(
     }
     blockMapper match {
       case _: RemoteBlockManager =>
-        throw new IllegalAccessError("Remote Block Mapper does not support this writing feature")
+        throw new IllegalAccessError("Remote BlockMapper does not support this writing feature")
       case d: DiskBlockManager =>
         logDebug(s"Attempting to put block $blockId")
         val startTime = System.currentTimeMillis

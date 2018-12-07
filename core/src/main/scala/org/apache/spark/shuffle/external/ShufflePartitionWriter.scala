@@ -17,9 +17,10 @@
 
 package org.apache.spark.shuffle.external
 
-import java.io.{Closeable, InputStream}
+import java.io.{Closeable, InputStream, OutputStream}
 
 private[spark] trait ShufflePartitionWriter extends Closeable {
-  def appendPartition(partitionId: Long, partitionInput: InputStream): Unit
+  def appendPartition(partitionId: Long, partitionOutput: OutputStream): Unit
+  def appendIndexFile(partitionId: Long, indexInput: InputStream): Unit
   def abort(exception: Throwable): Unit
 }

@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     _blockManager: BlockManager = null,
-    shuffleDataIO: ShuffleDataIO = null)
+    _shuffleDataIO: ShuffleDataIO = null)
   extends ShuffleBlockResolver
   with Logging {
 
@@ -58,13 +58,17 @@ private[spark] class IndexShuffleBlockResolver(
 
   private var shuffleReadSupport: ShuffleReadSupport = _
 
-  private var isExternalFileSystem = false
+  private var isRemote_ = false
 
   if (shuffleDataIO != null) {
-    shuffleWriteSupport = shuffleDataIO.writeSupport()
-    shuffleReadSupport = shuffleDataIO.readSupport()
-    isExternalFileSystem = true
+    shuffleWriteSupport = _shuffleDataIO.writeSupport()
+    shuffleReadSupport = _shuffleDataIO.readSupport()
+    isRemote_ = true
   }
+
+  def shuffleDataIO(): ShuffleDataIO = _shuffleDataIO
+  def isRemote(): Boolean = isRemote_
+
 
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
@@ -234,10 +238,10 @@ private[spark] class IndexShuffleBlockResolver(
         offset,
         nextOffset - offset)
     } finally {
-      if (isExternalFileSystem) {
+      if (isRemote()) {
         val writer = shuffleWriteSupport.newPartitionWriter(appId, blockId.shuffleId, blockId.mapId)
         try {
-          writer.appendPartition(blockId.reduceId, in)
+          writer.appendIndexFile(blockId.reduceId, in)
         } catch {
           case e: Exception =>
             writer.abort(e)

@@ -92,7 +92,7 @@ public class ExternalShuffleClient extends ShuffleClient{
       int port,
       String execId,
       String[] blockIds,
-      boolean isBackup,
+      boolean isRemote,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager) {
     checkInit();
@@ -148,7 +148,8 @@ public class ExternalShuffleClient extends ShuffleClient{
     }
   }
 
-  public void registerWithShuffleServerForBackups(
+  public void registerWithRemoteShuffleServer(
+      String driverHostPort,
       String host,
       int port,
       String execId,
@@ -156,7 +157,7 @@ public class ExternalShuffleClient extends ShuffleClient{
     checkInit();
     try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
       ByteBuffer registerMessage = new RegisterExecutorForBackupsOnly(
-              appId, execId, shuffleManager).toByteBuffer();
+          driverHostPort, appId, execId, shuffleManager).toByteBuffer();
       client.sendRpcSync(registerMessage, registrationTimeoutMs);
     }
   }

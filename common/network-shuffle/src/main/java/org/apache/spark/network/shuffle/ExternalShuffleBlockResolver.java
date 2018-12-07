@@ -103,7 +103,6 @@ public class ExternalShuffleBlockResolver {
     "org.apache.spark.shuffle.sort.SortShuffleManager",
     "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager");
 
-  private final File shuffleBackupsDir;
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
@@ -141,8 +140,6 @@ public class ExternalShuffleBlockResolver {
     } else {
       executors = Maps.newConcurrentMap();
     }
-    this.backupExecutors = Maps.newConcurrentMap();
-    this.shuffleBackupsDir = Files.createTempDirectory("spark-shuffle-backups").toFile();
     this.directoryCleaner = directoryCleaner;
   }
 
@@ -177,61 +174,6 @@ public class ExternalShuffleBlockResolver {
       logger.error("Error saving registered executors", e);
     }
     executors.put(fullId, executorInfo);
-  }
-
-  public void registerExecutorForBackups(String appId, String execId, String shuffleManager) {
-    AppExecId fullId = new AppExecId(appId, execId);
-    if (executors.containsKey(fullId)) {
-      throw new UnsupportedOperationException(
-          String.format(
-              "Executor %s cannot be registered for both primary shuffle management and backup" +
-                  " shuffle management.", fullId));
-    }
-    File executorBackupDir = Paths.get(
-        shuffleBackupsDir.getAbsolutePath(), appId, execId).toFile();
-    if (!executorBackupDir.mkdirs()) {
-      throw new RuntimeException(
-          String.format(
-              "Failed to create directories for executor backup shuffle files at %s.",
-              executorBackupDir.getAbsolutePath()));
-    }
-    if (!knownManagers.contains(shuffleManager)) {
-      throw new UnsupportedOperationException(
-          String.format(
-              "Unsupported shuffle manager of executor: %s.", fullId));
-    }
-
-    // TODO: Finish
-    ExecutorShuffleInfo backupShuffleInfo = new ExecutorShuffleInfo(
-        new String[] { },
-        new String[] { },
-        new String[] { executorBackupDir.getAbsolutePath() },
-        1,
-        shuffleManager);
-    logger.info("Registering executor {} with {} for backups.", fullId, backupShuffleInfo);
-    backupExecutors.put(fullId, backupShuffleInfo);
-  }
-
-  public StreamCallbackWithID openShuffleFileForBackup(
-      String appId, String execId, int shuffleId, int mapId) {
-    return getFileWriterStreamCallback(
-        appId,
-        execId,
-        shuffleId,
-        mapId,
-        "data",
-        FileWriterStreamCallback.BackupFileType.DATA);
-  }
-
-  public StreamCallbackWithID openShuffleIndexFileForBackup(
-      String appId, String execId, int shuffleId, int mapId) {
-    return getFileWriterStreamCallback(
-        appId,
-        execId,
-        shuffleId,
-        mapId,
-        "index",
-        FileWriterStreamCallback.BackupFileType.INDEX);
   }
 
   private StreamCallbackWithID getFileWriterStreamCallback(

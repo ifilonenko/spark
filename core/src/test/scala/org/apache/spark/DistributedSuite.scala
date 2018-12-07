@@ -194,7 +194,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
         cmId.port,
         cmId.executorId,
         blockId.toString,
-        cmId.isBackup,
+        cmId.isRemote,
         null)
       val deserialized = serializerManager.dataDeserializeStream(blockId,
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList

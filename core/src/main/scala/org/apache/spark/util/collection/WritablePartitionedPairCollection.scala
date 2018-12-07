@@ -57,6 +57,8 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
         cur = if (it.hasNext) it.next() else null
       }
 
+
+
       def hasNext(): Boolean = cur != null
 
       def nextPartition(): Int = cur._1._1

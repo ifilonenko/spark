@@ -259,7 +259,7 @@ final class ShuffleBlockFetcherIterator(
           address.port,
           address.executorId,
           blockIds.toArray,
-          address.isBackup,
+          address.isRemote,
           blockFetchingListener, this)
     } else {
       shuffleClient.fetchBlocks(
@@ -267,7 +267,7 @@ final class ShuffleBlockFetcherIterator(
         address.port,
         address.executorId,
         blockIds.toArray,
-        address.isBackup,
+        address.isRemote,
         blockFetchingListener,
         null)
     }
