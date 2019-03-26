@@ -201,34 +201,31 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       for (int i = 0; i < numPartitions; i++) {
         final File file = partitionWriterSegments[i].file();
+        if (!file.exists()) continue;
         boolean copyThrewException = true;
         ShufflePartitionWriter writer = null;
         try {
           writer = mapOutputWriter.getNextPartitionWriter();
           if (transferToEnabled) {
             WritableByteChannel outputChannel = writer.toChannel();
-            if (file.exists()) {
-              FileInputStream in = new FileInputStream(file);
-              try (FileChannel inputChannel = in.getChannel()) {
-                Utils.copyFileStreamNIO(inputChannel, outputChannel, 0, inputChannel.size());
-                copyThrewException = false;
-              } finally {
-                Closeables.close(in, copyThrewException);
-              }
+            FileInputStream in = new FileInputStream(file);
+            try (FileChannel inputChannel = in.getChannel()) {
+              Utils.copyFileStreamNIO(inputChannel, outputChannel, 0, inputChannel.size());
+              copyThrewException = false;
+            } finally {
+              Closeables.close(in, copyThrewException);
             }
           } else {
             OutputStream tempOutputStream = writer.toStream();
-            if (file.exists()) {
-              FileInputStream in = new FileInputStream(file);
-              try {
-                Utils.copyStream(in, tempOutputStream, false, false);
-                copyThrewException = false;
-              } finally {
-                Closeables.close(in, copyThrewException);
-              }
+            FileInputStream in = new FileInputStream(file);
+            try {
+              Utils.copyStream(in, tempOutputStream, false, false);
+              copyThrewException = false;
+            } finally {
+              Closeables.close(in, copyThrewException);
             }
           }
-          if (file.exists() && !file.delete()) {
+          if (!file.delete()) {
             logger.error("Unable to delete file for partition {}", i);
           }
         } finally {

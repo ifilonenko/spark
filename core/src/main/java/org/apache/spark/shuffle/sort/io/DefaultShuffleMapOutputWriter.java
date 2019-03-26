@@ -180,7 +180,7 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
       } else if (stream != null) {
         return stream.getCount();
       } else {
-        // Empty partition if stream and channel are never created
+        // Assume an empty partition if stream and channel are never created
         return 0;
       }
     }
