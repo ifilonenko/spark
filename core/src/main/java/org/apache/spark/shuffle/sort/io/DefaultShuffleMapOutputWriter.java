@@ -174,12 +174,13 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
           long newPosition = outputFileChannel.position();
           return newPosition - currChannelPosition;
         } catch (Exception e) {
-          log.error("The currPartition is: {}", partitionId, e);
+          log.error("The partition which failed is: {}", partitionId, e);
           throw new IllegalStateException("Failed to calculate position of file channel", e);
         }
       } else if (stream != null) {
         return stream.getCount();
       } else {
+        // Empty partition if stream and channel are never created
         return 0;
       }
     }
