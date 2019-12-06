@@ -356,6 +356,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val EXECUTOR_POD_CONTROLLER_CLASS =
+    ConfigBuilder("spark.kubernetes.executor.podController.class")
+      .doc("Experimental. Specify a class that can handle the creation " +
+        "and deletion of pods")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
