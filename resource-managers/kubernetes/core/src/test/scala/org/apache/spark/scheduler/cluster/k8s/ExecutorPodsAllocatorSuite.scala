@@ -16,12 +16,14 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
+import java.util
+
+import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{doNothing, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
@@ -66,10 +68,19 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var labeledPods: LABELED_PODS = _
 
   @Mock
+  private var podList: PodList = _
+
+  @Mock
+  private var pods: util.List[Pod] = _
+
+  @Mock
   private var driverPodOperations: PodResource[Pod, DoneablePod] = _
 
   @Mock
   private var executorBuilder: KubernetesExecutorBuilder = _
+
+  @Mock
+  private var executorPodController: ExecutorPodController = _
 
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
@@ -84,8 +95,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       meq(kubernetesClient))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     waitForExecutorPodsClock = new ManualClock(0L)
+    doNothing().when(executorPodController).initialize(kubernetesClient)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
-      conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+      conf, secMgr, executorBuilder, kubernetesClient,
+      snapshotsStore, executorPodController, waitForExecutorPodsClock)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID)
   }
 
@@ -93,9 +106,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     " first has not finished.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
     for (nextId <- 1 to podAllocationSize) {
-      verify(podOperations).create(podWithAttachedContainerForId(nextId))
+      verify(executorPodController).addPod(podWithAttachedContainerForId(nextId))
     }
-    verify(podOperations, never()).create(podWithAttachedContainerForId(podAllocationSize + 1))
+    verify(executorPodController,
+      never()).addPod(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
   test("Request executors in batches. Allow another batch to be requested if" +
@@ -105,13 +119,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       snapshotsStore.updatePod(runningExecutor(execId))
     }
     snapshotsStore.notifySubscribers()
-    verify(podOperations, never()).create(podWithAttachedContainerForId(podAllocationSize + 1))
+    verify(executorPodController,
+      never()).addPod(podWithAttachedContainerForId(podAllocationSize + 1))
     snapshotsStore.updatePod(runningExecutor(podAllocationSize))
     snapshotsStore.notifySubscribers()
-    verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
+    verify(executorPodController).addPod(podWithAttachedContainerForId(podAllocationSize + 1))
     snapshotsStore.updatePod(runningExecutor(podAllocationSize))
     snapshotsStore.notifySubscribers()
-    verify(podOperations, times(podAllocationSize + 1)).create(any(classOf[Pod]))
+    verify(executorPodController, times(podAllocationSize + 1)).addPod(any(classOf[Pod]))
   }
 
   test("When a current batch reaches error states immediately, re-request" +
@@ -123,7 +138,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val failedPod = failedExecutorWithoutDeletion(podAllocationSize)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
-    verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
+    verify(executorPodController).addPod(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
   test("When an executor is requested but the API does not report it in a reasonable time, retry" +
@@ -137,12 +152,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(podOperations
       .withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1"))
       .thenReturn(labeledPods)
+    when(labeledPods.list()).thenReturn(podList)
+    when(podList.getItems).thenReturn(pods)
     podsAllocatorUnderTest.setTotalExpectedExecutors(1)
     verify(podOperations).create(podWithAttachedContainerForId(1))
     waitForExecutorPodsClock.setTime(podCreationTimeout + 1)
     snapshotsStore.notifySubscribers()
-    verify(labeledPods).delete()
-    verify(podOperations).create(podWithAttachedContainerForId(2))
+    verify(executorPodController).removePods(pods)
+    verify(executorPodController).addPod(podWithAttachedContainerForId(2))
   }
 
   test("SPARK-28487: scale up and down on target executor count changes") {

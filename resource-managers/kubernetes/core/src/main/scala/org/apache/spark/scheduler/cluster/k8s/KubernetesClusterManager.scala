@@ -22,13 +22,13 @@ import java.util.concurrent.TimeUnit
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.util.{SystemClock, ThreadUtils}
+import org.apache.spark.util.{SystemClock, ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
 
@@ -98,10 +98,26 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val removedExecutorsCache = CacheBuilder.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()
+
+    val executorPodControllers = sc.conf.get(EXECUTOR_POD_CONTROLLER_CLASS)
+      .map(clazz => Utils.loadExtensions(
+        classOf[ExecutorPodController],
+        Seq(clazz), sc.conf))
+      .getOrElse(Seq(new ExecutorPodControllerImpl(sc.conf)))
+
+    if (executorPodControllers.size > 1) {
+      throw new SparkException(
+        s"Multiple executorPodControllers listed: $executorPodControllers")
+    }
+    val executorPodController = executorPodControllers.head
+
+    executorPodController.initialize(kubernetesClient)
+
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
       kubernetesClient,
       snapshotsStore,
+      executorPodController,
       removedExecutorsCache)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
@@ -110,6 +126,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       new KubernetesExecutorBuilder(),
       kubernetesClient,
       snapshotsStore,
+      executorPodController,
       new SystemClock())
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
@@ -129,6 +146,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       snapshotsStore,
       executorPodsAllocator,
       executorPodsLifecycleEventHandler,
+      executorPodController,
       podsWatchEventSource,
       podsPollingEventSource)
   }

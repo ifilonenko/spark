@@ -66,6 +66,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var labeledPods: LABELED_PODS = _
 
   @Mock
+  private var podList: PodList = _
+
+  @Mock
+  private var pods: java.util.List[Pod] = _
+
+  @Mock
   private var taskScheduler: TaskSchedulerImpl = _
 
   @Mock
@@ -76,6 +82,9 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   @Mock
   private var lifecycleEventHandler: ExecutorPodsLifecycleManager = _
+
+  @Mock
+  private var executorPodController: ExecutorPodController = _
 
   @Mock
   private var watchEvents: ExecutorPodsWatchSnapshotSource = _
@@ -107,6 +116,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       eventQueue,
       podAllocator,
       lifecycleEventHandler,
+      executorPodController,
       watchEvents,
       pollEvents)
   }
@@ -123,11 +133,13 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   test("Stop all components") {
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.list()).thenReturn(podList)
+    when(podList.getItems).thenReturn(pods)
     schedulerBackendUnderTest.stop()
     verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
-    verify(labeledPods).delete()
+    verify(executorPodController).removePods(pods)
     verify(kubernetesClient).close()
   }
 
@@ -151,23 +163,23 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
     when(labeledPods.withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2")).thenReturn(labeledPods)
 
+
     val podList = mock(classOf[PodList])
     when(labeledPods.list()).thenReturn(podList)
-    when(podList.getItems()).thenReturn(Arrays.asList[Pod]())
+    when(podList.getItems()).thenReturn(pods)
 
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
     verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
-    verify(labeledPods, never()).delete()
+    verify(executorPodController, never()).removePods(pods)
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
-    verify(labeledPods, never()).delete()
+    verify(executorPodController, never()).removePods(pods)
 
-    when(podList.getItems()).thenReturn(Arrays.asList(mock(classOf[Pod])))
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
-    verify(labeledPods, never()).delete()
+    verify(executorPodController, never()).removePods(pods)
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
-    verify(labeledPods).delete()
+    verify(executorPodController).removePods(pods)
   }
 }

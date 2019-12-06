@@ -27,12 +27,12 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
-import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsLifecycleManager(
     val conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
+    executorPodController: ExecutorPodController,
     // Use a best-effort to track which executors have been removed already. It's not generally
     // job-breaking if we remove executors more than once but it's ideal if we make an attempt
     // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
@@ -125,16 +125,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   }
 
   private def removeExecutorFromK8s(updatedPod: Pod): Unit = {
-    // If deletion failed on a previous try, we can try again if resync informs us the pod
-    // is still around.
-    // Delete as best attempt - duplicate deletes will throw an exception but the end state
-    // of getting rid of the pod is what matters.
-    Utils.tryLogNonFatalError {
-      kubernetesClient
-        .pods()
-        .withName(updatedPod.getMetadata.getName)
-        .delete()
-    }
+    executorPodController.removePod(updatedPod)
   }
 
   private def removeExecutorFromSpark(

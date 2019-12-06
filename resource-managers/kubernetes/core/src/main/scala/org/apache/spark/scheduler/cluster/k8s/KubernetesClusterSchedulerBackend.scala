@@ -40,6 +40,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: ExecutorPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
+    executorPodController: ExecutorPodController,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
@@ -99,11 +100,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     if (shouldDeleteExecutors) {
       Utils.tryLogNonFatalError {
-        kubernetesClient
+        val pods = kubernetesClient
           .pods()
           .withLabel(SPARK_APP_ID_LABEL, applicationId())
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .delete()
+        executorPodController.removePods(pods.list().getItems)
       }
     }
 
@@ -146,11 +147,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_APP_ID_LABEL, applicationId())
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .withLabelIn(SPARK_EXECUTOR_ID_LABEL, executorIds: _*)
+          .list()
+          .getItems()
 
-        if (!running.list().getItems().isEmpty()) {
-          logInfo(s"Forcefully deleting ${running.list().getItems().size()} pods " +
+        if (!running.isEmpty()) {
+          logInfo(s"Forcefully deleting ${running.size()} pods " +
             s"(out of ${executorIds.size}) that are still running after graceful shutdown period.")
-          running.delete()
+          executorPodController.removePods(running)
         }
       }
     }

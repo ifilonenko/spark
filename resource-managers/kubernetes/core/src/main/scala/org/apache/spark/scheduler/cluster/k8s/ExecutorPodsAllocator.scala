@@ -35,6 +35,7 @@ private[spark] class ExecutorPodsAllocator(
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
+    executorPodController: ExecutorPodController,
     clock: Clock) extends Logging {
 
   private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
@@ -115,12 +116,12 @@ private[spark] class ExecutorPodsAllocator(
       newlyCreatedExecutors --= timedOut
       if (shouldDeleteExecutors) {
         Utils.tryLogNonFatalError {
-          kubernetesClient
+          val pods = kubernetesClient
             .pods()
             .withLabel(SPARK_APP_ID_LABEL, applicationId)
             .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, timedOut.toSeq.map(_.toString): _*)
-            .delete()
+          executorPodController.removePods(pods.list().getItems)
         }
       }
     }
@@ -170,13 +171,13 @@ private[spark] class ExecutorPodsAllocator(
       if (toDelete.nonEmpty) {
         logInfo(s"Deleting ${toDelete.size} excess pod requests (${toDelete.mkString(",")}).")
         Utils.tryLogNonFatalError {
-          kubernetesClient
+          val pods = kubernetesClient
             .pods()
             .withField("status.phase", "Pending")
             .withLabel(SPARK_APP_ID_LABEL, applicationId)
             .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, toDelete.sorted.map(_.toString): _*)
-            .delete()
+          executorPodController.removePods(pods.list().getItems)
           newlyCreatedExecutors --= toDelete
           knownPendingCount -= knownPendingToDelete.size
         }
@@ -203,7 +204,7 @@ private[spark] class ExecutorPodsAllocator(
           .addToContainers(executorPod.container)
           .endSpec()
           .build()
-        kubernetesClient.pods().create(podWithAttachedContainer)
+        executorPodController.addPod(podWithAttachedContainer)
         newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
       }
